@@ -1,32 +1,42 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { verifyToken } from "@/lib/auth";
+import { verifyToken, getPublicPaths } from "@/lib/auth-edge";
 
 export function middleware(request: NextRequest) {
   const token = request.cookies.get("token")?.value;
+  const publicPaths = getPublicPaths();
+  const { pathname } = request.nextUrl;
 
-  const publicPaths = ["/", "/signin", "/signup", "/pricing"];
-  const isPublicPath = publicPaths.includes(request.nextUrl.pathname);
+  // API routes are handled by the API routes themselves
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
 
+  const isPublicPath = publicPaths.includes(pathname);
+
+  // Redirect to login if no token and not on a public page
   if (!token && !isPublicPath) {
-    return NextResponse.redirect(new URL("/signin", request.url));
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   if (token) {
     const payload = verifyToken(token);
     if (!payload) {
-      // Invalid token
-      const response = NextResponse.redirect(new URL("/signin", request.url));
+      // Invalid or expired token — clear it and redirect
+      const response = NextResponse.redirect(new URL("/login", request.url));
       response.cookies.delete("token");
       return response;
     }
 
-    if (isPublicPath && request.nextUrl.pathname !== "/" && request.nextUrl.pathname !== "/pricing") {
+    // Redirect authenticated users away from login/signup
+    if (pathname === "/login" || pathname === "/signup") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
-    
-    // Admin check for /admin paths
-    if (request.nextUrl.pathname.startsWith("/admin") && payload.role !== "admin") {
+
+    // Admin guard
+    if (pathname.startsWith("/admin") && payload.role !== "admin") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
@@ -36,13 +46,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };

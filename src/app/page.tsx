@@ -80,7 +80,7 @@ export default function GeneratorPage() {
     setIsGenerating(true)
 
     try {
-      const res = await fetch("/api/generate", {
+      const res = await fetch("/api/proposals/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
